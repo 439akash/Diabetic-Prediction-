@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DiaPredict - AI Powered Health Insight</title>
+    <!-- Tailwind CSS (Offline-first with CDN fallback) -->
+    <script src="lib/tailwind.js"></script>
+    <script>
+        if (typeof tailwind === 'undefined') {
+            document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+        }
+    </script>
+    <script>
+        if (typeof tailwind !== 'undefined') {
+            tailwind.config = {
+                darkMode: 'class',
+                theme: {
+                    extend: {
+                        colors: {
+                            health: {
+                                50: '#f0fdf4',
+                                100: '#dcfce7',
+                                200: '#bbf7d0',
+                                300: '#86efac',
+                                400: '#4ade80',
+                                500: '#22c55e',
+                                600: '#16a34a',
+                                700: '#15803d',
+                                800: '#166534',
+                                900: '#14532d',
+                            },
+                        },
+                        borderRadius: {
+                            '2xl': '1rem',
+                            '3xl': '1.5rem',
+                        },
+                        fontFamily: {
+                            sans: ['Inter', 'sans-serif'],
+                        },
+                        animation: {
+                            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        }
+                    }
+                }
+            };
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Libraries from local lib folder for absolute stability -->
+    <script src="lib/react.js"></script>
+    <script src="lib/react-dom.js"></script>
+    <script src="lib/babel.min.js"></script>
+    <script src="lib/react-is.js"></script>
+    <script>window.react = window.React;</script>
+    <script src="lib/lucide-react.js"></script>
+    <script src="lib/recharts.js"></script>
+    <script src="lib/framer-motion.js"></script>
+    
+    <!-- Bridge for library compatibility -->
+    <script>
+        // Ensure Lucide is accessible
+        window.lucide = window.LucideReact || window.lucide;
+    </script>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background-color: #f8fafc;
+            color: #1e293b;
+            font-family: 'Inter', sans-serif;
+        }
+        .dark body {
+            background-color: #020617;
+            color: #f8fafc;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .dark .glass-card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none; /* Chrome, Safari and Opera */
+        }
+        .gradient-button {
+            background: linear-gradient(to bottom right, #22c55e, #16a34a);
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2);
+            transition: all 0.3s;
+        }
+        .gradient-button:hover {
+            box-shadow: 0 20px 25px -5px rgba(34, 197, 94, 0.3);
+            transform: translateY(-2px);
+        }
+        .gradient-button:active {
+            transform: translateY(0);
+        }
+        .sidebar-active {
+            background: rgba(34, 197, 94, 0.1);
+            border-right: 4px solid #22c55e;
+        }
+        .dark .sidebar-active {
+            background: rgba(34, 197, 94, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useCallback } = React;
+        
+        // Safe Icon Getter - Prevents Error #130 by providing a fallback component if an icon is missing
+        const safeLucide = new Proxy(typeof lucide !== 'undefined' ? lucide : {}, {
+            get: (target, prop) => {
+                if (target[prop]) return target[prop];
+                return (props) => (
+                    <svg 
+                      width={props.size || 24} 
+                      height={props.size || 24} 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                      {...props}
+                    >
+                        <circle cx="12" cy="12" r="10" />
+                    </svg>
+                );
+            }
+        });
+
+        const { 
+            LayoutDashboard, Activity, FileText, ClipboardList, Info, Contact, 
+            LogOut, Sun, Moon, Search, Bell, Heart, Leaf, ChevronRight, 
+            TrendingUp, Users, Target, Shield, CheckCircle, AlertCircle, 
+            X, Menu, ShieldCheck, ChevronDown, Award, Apple, Dumbbell, 
+            Droplets, Stethoscope, ArrowRight, Mail, Lock, Wind, Eye, Zap, MessageSquare, Footprints, Flame, Thermometer, TrendingDown, Lightbulb, Brain, HeartPulse, MessageCircle
+        } = safeLucide;
+        
+        // Safe Recharts Proxy
+        const safeRecharts = new Proxy(window.Recharts || {}, {
+            get: (target, prop) => {
+                if (target[prop]) return target[prop];
+                // Return a pass-through component instead of undefined
+                return (props) => props.children || null;
+            }
+        });
+
+        const { 
+            LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
+            ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar, ComposedChart
+        } = safeRecharts;
+
+
+        // Safe Motion Access - Ensures <motion.div> etc. still work as plain tags if library is missing
+        const motionSource = window.Motion || window.FramerMotion || {};
+        const motion = motionSource.motion || new Proxy((Tag) => Tag, {
+            get: (target, prop) => {
+                return target[prop] || prop;
+            }
+        });
+        const AnimatePresence = motionSource.AnimatePresence || (({children}) => children);
+
+        // --- CUSTOM ICONS ---
+        const DashboardIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+          </svg>
+        );
+
+        const PredictionIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+            <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+            <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/>
+            <path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/>
+            <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/>
+            <path d="M3.477 10.896a4 4 0 0 1 .585-.396"/>
+            <path d="M19.938 10.5a4 4 0 0 1 .585.396"/>
+            <path d="M6 18a4 4 0 0 1-1.967-.516"/>
+            <path d="M19.967 17.484A4 4 0 0 1 18 18"/>
+          </svg>
+        );
+
+        const ReportIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <path d="M12 11v6" />
+            <path d="M9 14h6" />
+          </svg>
+        );
+
+        const HealthTipsIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+            <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h3.27"/>
+          </svg>
+        );
+
+        const AboutIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+          </svg>
+        );
+
+        const ContactIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+            <path d="M8 12h.01" />
+            <path d="M12 12h.01" />
+            <path d="M16 12h.01" />
+          </svg>
+        );
+
+        const DarkModeIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+          </svg>
+        );
+
+        const LogoutIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        );
+
+        const SmartScannerIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 1.75} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <g className="origin-center animate-[spin_8s_linear_infinite]">
+              <circle cx="12" cy="12" r="11" strokeDasharray="12 10" strokeOpacity="0.2" />
+              <circle cx="12" cy="12" r="11" strokeDasharray="4 20" strokeOpacity="0.6" strokeWidth="2" />
+            </g>
+            <path d="M12 6.5c-2.5-3-6-1.5-6 2 0 4 6 7.5 6 7.5s6-3.5 6-7.5c0-3.5-3.5-5-6-2Z" strokeDasharray="2 3" strokeOpacity="0.3" className="animate-pulse" />
+            <path d="M3 13h3.5L9 8l3.5 10 3-6 2 2h3.5" />
+            <circle cx="9" cy="8" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="12.5" cy="18" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="15.5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+          </svg>
+        );
+
+        // --- DASHBOARD CARD METRIC ICONS ---
+        const AvgGlucoseRateIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 22c3.866 0 7-3.134 7-7 0-4.5-7-13-7-13S5 10.5 5 15c0 3.866 3.134 7 7 7z" />
+            <path d="M12 9v7" />
+            <path d="M9 13.5h6" />
+            <path d="M16 8.5h.01M16 11.5h.01M8 9.5h.01" strokeWidth={3} strokeLinecap="round" />
+          </svg>
+        );
+
+        const PredictionsIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <rect x="5" y="5" width="14" height="14" rx="3" />
+            <path d="M9 9h6v6H9z" strokeDasharray="2 1" />
+            <path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4" />
+            <path d="M12 9v6M9 12h6" />
+          </svg>
+        );
+
+        const AccuracyIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="m9 11 2 2 4-4" strokeWidth={2.5} />
+          </svg>
+        );
+
+        const AvgHeartRateIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+            <path d="M3.22 12H7.5l1.5-3.5 1.5 6.5 1-4.5 1.5 1.5h3.28" strokeWidth={2} />
+          </svg>
+        );
+
+        // --- HEALTH & LIFESTYLE COACHING ICONS ---
+        const FiberBoostIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 22V10M12 10c0-2-1.5-4-4-4M12 14c0-2.5 2-4.5 4-4.5M12 18c0-1.5-1-3-3-3M12 10c0-1.5 1-3 3-3" />
+            <path d="M12 6c0-2 2-3 2-3" />
+            <circle cx="7" cy="6" r="0.5" fill="currentColor" stroke="none" />
+            <circle cx="17" cy="8" r="0.5" fill="currentColor" stroke="none" />
+            <circle cx="6" cy="12" r="0.5" fill="currentColor" stroke="none" />
+            <circle cx="18" cy="14" r="0.5" fill="currentColor" stroke="none" />
+          </svg>
+        );
+
+        const ActiveLifeIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="12" cy="5" r="2" />
+            <path d="M6 21v-4l4-2 2-3 4 2 3 5" />
+            <path d="M12 11v3l-4 2" />
+          </svg>
+        );
+
+        const HydrationIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-13-7-13S5 10.7 5 15a7 7 0 0 0 7 7z" />
+            <path d="M9 13.5c1.5 1 4.5 1 6 0" />
+          </svg>
+        );
+
+        const SleepCycleIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            <path d="M19 4h2M20 3v2M15 8h1" />
+          </svg>
+        );
+
+        const StressControlIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 3c0 0-4 6-4 10a4 4 0 0 0 8 0c0-4-4-10-4-10Z" />
+            <path d="M12 10c-3 0-6 2-6 6a3 3 0 0 0 6 0c0-4 0-6 0-6Z" />
+            <path d="M12 10c3 0 6 2 6 6a3 3 0 0 0-6 0c0-4 0-6 0-6Z" />
+          </svg>
+        );
+
+        const PortionSizeIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 2v20M12 12H2M12 12l7.07 7.07" />
+          </svg>
+        );
+
+        const WholeGrainsIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 22V10M12 10c0-2-1.5-4-4-4M12 14c0-2.5 2-4.5 4-4.5M12 18c0-1.5-1-3-3-3M12 10c0-1.5 1-3 3-3" />
+            <path d="M12 6c0-2 2-3 2-3" />
+          </svg>
+        );
+
+        const RegularCheckIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <rect x="5" y="4" width="14" height="16" rx="2" />
+            <path d="M9 9h6M9 13h6M9 17h4M9 2h6v2H9z" />
+          </svg>
+        );
+
+        const HealthyFatsIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 2C8.5 2 6 6 6 12c0 5 3 10 6 10s6-5 6-10c0-6-2.5-10-6-10Z" />
+            <circle cx="12" cy="15" r="3" />
+          </svg>
+        );
+
+        const SugarLimitIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <rect x="5" y="9" width="10" height="10" rx="1" />
+            <path d="m3 3 18 18M11 9l4-4h5v5l-4 4" />
+          </svg>
+        );
+
+        const MealTimingIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2M7 12h1M16 12h1" />
+          </svg>
+        );
+
+        const FootCareIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M10 5a2 2 0 1 0-2-2M14 6a1.5 1.5 0 1 0-1.5-1.5M17 8a1 1 0 1 0-1-1M19 11a1 1 0 1 0-1-1" />
+            <path d="M17 14c-1-2.5-3-3.5-5-4.5-2.5-1-4-.5-5.5.5C5 11.5 4.5 13 4.5 15c0 4 3 6.5 6 6.5s6-2.5 6.5-6.5v-1Z" />
+          </svg>
+        );
+
+        const VisionCareIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="12" cy="12" r="1" />
+          </svg>
+        );
+
+        const MindfulnessIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="12" cy="5" r="2" />
+            <path d="M12 7c-2.5 0-4.5 2-4.5 4.5v3.5l-3 3v2h15v-2l-3-3v-3.5C16.5 9 14.5 7 12 7Z" />
+            <path d="M8 18c1 1 2 2 4 2s3-1 4-2" />
+          </svg>
+        );
+
+        const OralHealthIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M12 2C8.5 2 6.5 3.5 6.5 7.5c0 2 .5 3 1 4.5.5 1.5-1 3.5-1 5s1.5 5 5.5 5 5.5-3.5 5.5-5-1.5-3.5-1-5c.5-1.5 1-2.5 1-4.5C17.5 3.5 15.5 2 12 2Z" />
+            <path d="M12 7v4" strokeWidth={1.5} />
+          </svg>
+        );
+
+        const BloodPressureIcon = (props) => (
+          <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="2" />
+            <path d="m12 12 4-4M12 6v2M18 12h-2M6 12h2M12 18v-2" />
+          </svg>
+        );
+
+        // --- AUTH COMPONENTS & CUSTOM ICONS ---
+
+        const EmailIcon = (props) => (
+          <svg width={props.size || 18} height={props.size || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <rect x="3" y="4" width="18" height="15" rx="3" />
+            <path d="m21 7-7.4 4.62a2 2 0 0 1-2.2 0L3 7" />
+            <path d="M7 14h2.5l1.5-3 2 5 1.5-3H17" strokeWidth={1.5} strokeOpacity={0.75} />
+          </svg>
+        );
+
+        const UserIcon = (props) => (
+          <svg width={props.size || 18} height={props.size || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+            <circle cx="12" cy="7" r="1.5" strokeWidth="1.5" strokeOpacity="0.5" />
+            <path d="M8.2 16.5c1-1 2.3-1.5 3.8-1.5s2.8.5 3.8 1.5" strokeWidth="1" strokeOpacity="0.4" />
+          </svg>
+        );
+
+        const TimeIcon = (props) => (
+          <svg width={props.size || 18} height={props.size || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={props.strokeWidth || 2} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+            <path d="M12 2a10 10 0 0 1 10 10" strokeDasharray="3 3" strokeOpacity="0.4" />
+            <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+          </svg>
+        );
+
+        const AuthLayout = ({ children, title, subtitle, alternativeText, alternativeAction, onSwitch }) => {
+          const [currentTime, setCurrentTime] = React.useState(new Date());
+
+          React.useEffect(() => {
+            const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+            return () => clearInterval(timer);
+          }, []);
+
+          const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+
+          return (
+            <div className="min-h-screen bg-white flex font-sans overflow-hidden">
+                {/* Left Side: Information */}
+                <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900 items-center justify-center p-16">
+                    <div className="absolute inset-0 z-0">
+                        <img 
+                            src="https://images.unsplash.com/photo-1576091160550-2173bdb999ef?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80" 
+                            className="w-full h-full object-cover opacity-30"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
+                    </div>
+                    
+                    <div className="relative z-10 max-w-xl">
+                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
+                            <div className="bg-health-500/20 backdrop-blur-xl border border-health-500/30 p-2 rounded-2xl inline-flex mb-8">
+                                <Leaf className="text-health-400" size={24} />
+                            </div>
+                            <h1 className="text-5xl font-bold text-white mb-8 leading-tight">
+                                Understanding <span className="text-health-400">Diabetes</span> through Clinical Intelligence
+                            </h1>
+                            <div className="space-y-6 text-slate-300 text-lg leading-relaxed">
+                                <p>Diabetes is a chronic health condition that affects how your body turns food into energy. Most of the food you eat is broken down into sugar (glucose) and released into your bloodstream.</p>
+                                <p>When your blood sugar goes up, it signals your pancreas to release insulin. Insulin acts like a key to let the blood sugar into your body’s cells for use as energy.</p>
+                                <p><span className="text-white font-bold">Type 2 Diabetes</span> is the most common form, where your body doesn't use insulin well. Over time, high blood sugar can cause serious health problems.</p>
+                                <p className="text-health-400 font-medium">Early prediction and proactive lifestyle changes are the most effective tools in metabolic health management.</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                </div>
+
+                {/* Right Side: Form */}
+                <div className="w-full lg:w-1/2 bg-slate-50 flex items-center justify-center p-6 sm:p-12 relative overflow-y-auto">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-health-500/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+                    
+                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="w-full max-w-[440px] relative z-10">
+                        <div className="bg-white rounded-[2.5rem] p-10 md:p-12 shadow-[0_20px_50px_rgba(0,0,0,0.08)] border border-slate-100">
+                            <div className="text-center mb-10">
+                                <div className="lg:hidden bg-health-500 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-health-500/20">
+                                    <Leaf className="text-white" size={32} />
+                                </div>
+                                <h2 className="text-3xl font-bold text-slate-800 tracking-tight leading-tight">{title}</h2>
+                                <p className="text-slate-500 mt-3 font-medium text-sm">{subtitle}</p>
+                            </div>
+
+                            {children}
+
+                            <div className="mt-10 text-center border-t border-slate-100 pt-8">
+                                <p className="text-slate-500 text-sm font-medium">
+                                    {alternativeText}{' '}
+                                    <button onClick={onSwitch} className="text-health-500 font-bold hover:text-health-600 transition-colors ml-1 inline-flex items-center group">
+                                        {alternativeAction}
+                                        <ArrowRight size={14} className="ml-1 group-hover:translate-x-1 transition-transform" />
+                                    </button>
+                                </p>
+                            </div>
+                        </div>
+                        <div className="mt-8 text-center flex flex-col items-center space-y-3">
+                            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">DiaPredict AI • Enterprise Grade Security</p>
+                            <div className="flex items-center justify-center space-x-2 text-slate-400 text-[10px] font-bold uppercase tracking-widest bg-slate-200/50 dark:bg-slate-800/40 px-4 py-2 rounded-full shadow-sm border border-slate-200/30">
+                              <TimeIcon size={12} className="text-health-500 animate-pulse" />
+                              <span>Active System Time: {formattedTime}</span>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            </div>
+          );
+        };
+
+        const LoginView = ({ onLogin, onSwitch }) => (
+          <AuthLayout 
+            title="Sign In" 
+            subtitle="Access your healthcare dashboard"
+            alternativeText="New to DiaPredict?"
+            alternativeAction="Create account"
+            onSwitch={onSwitch}
+          >
+            <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onLogin(); }}>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Email Address</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-health-500 transition-colors">
+                    <EmailIcon size={18} />
+                  </div>
+                  <input 
+                    type="email" 
+                    placeholder="name@example.com" 
+                    className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-health-500/50 focus:border-health-500 transition-all"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center ml-1">
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Password</label>
+                  <a href="#" className="text-[10px] font-bold text-health-500 hover:text-health-600 uppercase tracking-wider">Forgot?</a>
+                </div>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-health-500 transition-colors">
+                    <Lock size={18} />
+                  </div>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-health-500/50 focus:border-health-500 transition-all"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <button 
+                type="submit"
+                className="w-full py-4.5 bg-health-500 text-white font-bold rounded-2xl shadow-xl shadow-health-500/20 hover:bg-health-600 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-2"
+              >
+                <span>Enter Dashboard</span>
+                <ShieldCheck size={18} />
+              </button>
+            </form>
+          </AuthLayout>
+        );
+
+        const RegisterView = ({ onRegister, onSwitch }) => (
+          <AuthLayout 
+            title="Get Started" 
+            subtitle="Join the intelligence platform"
+            alternativeText="Already registered?"
+            alternativeAction="Sign in instead"
+            onSwitch={onSwitch}
+          >
+            <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); onRegister(); }}>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">First Name</label>
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-health-500 transition-colors">
+                      <UserIcon size={16} />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="John" 
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-health-500/50 focus:border-health-500 transition-all"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Last Name</label>
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-health-500 transition-colors">
+                      <UserIcon size={16} />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="Doe" 
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-health-500/50 focus:border-health-500 transition-all"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Email Address</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-health-500 transition-colors">
+                    <EmailIcon size={16} />
+                  </div>
+                  <input 
+                    type="email" 
+                    placeholder="name@example.com" 
+                    className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-health-500/50 focus:border-health-500 transition-all"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Create Password</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-health-500 transition-colors">
+                    <Lock size={16} />
+                  </div>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-health-500/50 focus:border-health-500 transition-all"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-start space-x-3 text-xs text-slate-500 dark:text-slate-400 px-1 pt-2 text-left">
+                <input type="checkbox" className="mt-0.5 rounded border-slate-200 dark:border-slate-700 text-health-500 focus:ring-health-500" required />
+                <span className="leading-relaxed">I agree to the <a href="#" className="text-health-500 font-bold hover:underline">Terms</a> and <a href="#" className="text-health-500 font-bold hover:underline">Privacy</a></span>
+              </div>
+              <button 
+                type="submit"
+                className="w-full py-4.5 bg-health-500 text-white font-bold rounded-2xl shadow-xl shadow-health-500/20 hover:bg-health-600 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+              >
+                Create Free Account
+              </button>
+            </form>
+          </AuthLayout>
+        );
+
+
+        // --- SHARED COMPONENTS ---
+
+        const Navbar = ({ onMenuClick, activeTab, formattedTime }) => (
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={onMenuClick}
+                className="lg:hidden bg-white dark:bg-slate-800 p-2.5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-slate-500 hover:text-health-500 transition-colors"
+              >
+                <Menu size={20} />
+              </button>
+              <div>
+                <h2 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">{activeTab}</h2>
+                <p className="text-slate-400 dark:text-slate-500 text-sm mt-1 font-normal">DiaPredict Intelligence Dashboard</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:flex items-center space-x-3 mr-4 bg-slate-100/50 dark:bg-slate-800/30 px-3.5 py-2 rounded-2xl border border-slate-200/20">
+                <TimeIcon size={16} className="text-health-500 animate-pulse" />
+                <div className="text-right">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">System Time</p>
+                  <p className="text-xs font-black text-health-500 leading-none">{formattedTime}</p>
+                </div>
+              </div>
+
+
+              <div className="relative cursor-pointer hover:scale-110 transition-transform hidden sm:block">
+                <div className="bg-white dark:bg-slate-800 p-2.5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-slate-500">
+                  <Bell size={20} />
+                </div>
+                <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white dark:border-slate-800 rounded-full"></span>
+              </div>
+              <div className="flex items-center space-x-3 pl-4 border-l border-slate-200 dark:border-slate-700 cursor-pointer group">
+                <div className="flex items-center space-x-3 px-4 py-2 bg-health-50 dark:bg-health-950/30 rounded-full border border-health-100 dark:border-health-900/30">
+                  <div className="w-2 h-2 bg-health-500 rounded-full animate-pulse"></div>
+                  <span className="text-[10px] font-bold text-health-600 dark:text-health-400 uppercase tracking-widest">Account Active</span>
+                  <ChevronDown size={14} className="text-slate-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+        const SidebarItem = ({ icon: Icon, emoji, label, active, onClick }) => (
+          <motion.div 
+            whileHover={{ x: 5 }}
+            onClick={onClick}
+            className={`flex items-center space-x-4 p-3.5 rounded-[1.25rem] cursor-pointer transition-all duration-300 group ${active ? 'bg-health-500 text-white shadow-xl shadow-health-100' : 'text-slate-500 hover:bg-health-50 hover:text-health-600'}`}
+          >
+            <div className={`w-9 h-9 rounded-lg border flex items-center justify-center text-lg ${active ? 'border-white/40 bg-white/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 group-hover:border-health-300 dark:group-hover:border-health-700 group-hover:bg-health-50 dark:group-hover:bg-health-900/30'} transition-colors`}>
+                {emoji ? emoji : <Icon size={18} strokeWidth={1.75} className={`${active ? 'text-white' : 'text-health-500 group-hover:scale-110'} transition-all`} />}
+            </div>
+            <span className={`font-bold text-[13px] tracking-tight ${active ? 'text-white' : ''}`}>{label}</span>
+          </motion.div>
+        );
+
+        const Sidebar = ({ darkMode, setDarkMode, activeTab, setActiveTab, onLogout, isOpen, onClose }) => (
+          <>
+            <AnimatePresence>
+              {isOpen && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={onClose}
+                  className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[60] lg:hidden"
+                />
+              )}
+            </AnimatePresence>
+
+            <motion.div 
+              initial={false}
+              animate={{ x: typeof window !== 'undefined' && window.innerWidth >= 1024 ? 0 : (isOpen ? 0 : -320) }}
+              className={`w-64 fixed left-0 top-0 h-screen bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 p-6 flex flex-col z-[70] transition-colors duration-500`}
+            >
+              <div className="flex items-center justify-between mb-10">
+                <div className="flex items-center space-x-3">
+                        <div className="bg-white p-1 rounded-xl shadow-lg shadow-health-100 overflow-hidden border border-slate-50">
+                            <img src="src/assets/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+                        </div>
+                  <div>
+                    <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight leading-tight text-nowrap">DiaPredict</h1>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-[0.2em]">Health Intelligence</p>
+                  </div>
+                </div>
+                <button onClick={onClose} className="lg:hidden p-2 text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
+              <nav className="flex-1 space-y-1.5 overflow-y-auto scrollbar-hide">
+                <SidebarItem icon={DashboardIcon} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => { setActiveTab('Dashboard'); onClose(); }} />
+                <SidebarItem icon={PredictionIcon} label="Prediction" active={activeTab === 'Prediction'} onClick={() => { setActiveTab('Prediction'); onClose(); }} />
+                <SidebarItem icon={ReportIcon} label="Report" active={activeTab === 'Report'} onClick={() => { setActiveTab('Report'); onClose(); }} />
+                <SidebarItem icon={HealthTipsIcon} label="Health Tips" active={activeTab === 'Health Tips'} onClick={() => { setActiveTab('Health Tips'); onClose(); }} />
+                <SidebarItem icon={AboutIcon} label="About" active={activeTab === 'About'} onClick={() => { setActiveTab('About'); onClose(); }} />
+                <SidebarItem icon={ContactIcon} label="Contact" active={activeTab === 'Contact'} onClick={() => { setActiveTab('Contact'); onClose(); }} />
+              </nav>
+
+              <div className="mt-6 flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700 mb-6">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Dark Mode</span>
+                <button 
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`w-12 h-6 rounded-full transition-all duration-500 relative ${darkMode ? 'bg-health-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-slate-300'}`}
+                >
+                  <motion.div 
+                    animate={{ x: darkMode ? 24 : 0 }}
+                    className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-md"
+                  >
+                    <DarkModeIcon size={10} strokeWidth={2.5} className={darkMode ? "text-health-600" : "text-slate-400"} />
+                  </motion.div>
+                </button>
+              </div>
+
+              <button 
+                onClick={onLogout}
+                className="w-full flex items-center space-x-3 p-3.5 rounded-xl text-slate-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-all duration-300 font-bold group"
+              >
+                <LogoutIcon size={20} strokeWidth={1.75} className="group-hover:-translate-x-0.5 transition-transform" />
+                <span>Log Out</span>
+              </button>
+            </motion.div>
+          </>
+        );
+
+        const StatCard = ({ icon: Icon, title, value, subtitle, color, chart, index }) => (
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: index * 0.1 }}
+            className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between group hover:shadow-xl hover:shadow-health-500/10 transition-all duration-300 glass-card"
+          >
+            <div className="flex items-center space-x-4">
+              <div className={`p-4 rounded-2xl ${color} bg-opacity-10 dark:bg-opacity-20 group-hover:scale-110 transition-transform`}>
+                <Icon size={24} className={color.replace('bg-', 'text-')} />
+              </div>
+              <div>
+                <p className="text-slate-400 dark:text-slate-500 text-[10px] font-black mb-1 uppercase tracking-widest">{title}</p>
+                <h3 className="text-2xl font-black text-slate-800 dark:text-white leading-none">{value}</h3>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 font-bold">{subtitle}</p>
+              </div>
+            </div>
+            {chart && <div className="w-16 h-16">{chart}</div>}
+          </motion.div>
+        );
+
+        const StatsGrid = ({ probability }) => {
+          const riskDonut = (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={[{ value: parseFloat(probability) }, { value: 100 - parseFloat(probability) }]}
+                  innerRadius={25} outerRadius={30} paddingAngle={0} dataKey="value" startAngle={90} endAngle={-270}
+                >
+                  <Cell fill="#22c55e" />
+                  <Cell fill="#f1f5f9" />
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          );
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <StatCard index={0} icon={AvgGlucoseRateIcon} title="Avg. Glucose Rate" value="95 mg/dL" subtitle="Target: 70-100 mg/dL" color="bg-emerald-500" />
+              <StatCard index={1} icon={PredictionsIcon} title="Predictions" value="12" subtitle="This Month" color="bg-blue-500" />
+              <StatCard index={2} icon={AccuracyIcon} title="Accuracy" value="92.6%" subtitle="Model Precision" color="bg-purple-500" />
+              <StatCard index={3} icon={AvgHeartRateIcon} title="Avg. Heart Rate" value="72 BPM" subtitle="Normal: 60-100 BPM" color="bg-red-500" />
+            </div>
+          );
+        };
+
+        const PredictionView = ({ formData, setFormData, onPredict }) => {
+          const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+          
+          const inputs = [
+            { label: 'Age (years)', name: 'age', type: 'number', placeholder: 'e.g. 45' },
+            { label: 'Gender', name: 'gender', type: 'select', options: ['Male', 'Female', 'Other'] },
+            { label: 'BMI (kg/m2)', name: 'bmi', type: 'number', placeholder: 'e.g. 28.7' },
+            { label: 'Glucose Level', name: 'glucose', type: 'number', placeholder: 'e.g. 145' },
+            { label: 'Glucose Type', name: 'glucoseType', type: 'select', options: ['Fasting', 'Post-meal'] },
+            { label: 'HbA1c (%)', name: 'hba1c', type: 'number', placeholder: 'e.g. 5.4' },
+            { label: 'BP (mmHg)', name: 'bp', type: 'text', placeholder: 'e.g. 120/80' },
+            { label: 'Pregnancies', name: 'pregnancies', type: 'number', placeholder: 'e.g. 2', hideIf: (d) => d.gender === 'Male' },
+            { label: 'Skin Thickness', name: 'skin', type: 'number', placeholder: 'e.g. 20' },
+            { label: 'Insulin Level', name: 'insulin', type: 'number', placeholder: 'e.g. 15.6' },
+            { label: 'Pedigree Function', name: 'pedigree', type: 'number', placeholder: 'e.g. 0.65' },
+            { label: 'Activity', name: 'activity', type: 'select', options: ['Low', 'Moderate', 'High'] },
+          ];
+
+          return (
+            <motion.div 
+              initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+              className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 shadow-sm border border-slate-100 dark:border-slate-800 h-fit glass-card"
+            >
+              <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">Risk Analysis</h3>
+              <p className="text-slate-400 dark:text-slate-500 text-sm mb-6 font-medium">Enter patient metrics for AI diagnosis</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {inputs.filter(i => !i.hideIf || !i.hideIf(formData)).map((input, idx) => (
+                  <div key={input.name}>
+                    <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-widest">{input.label}</label>
+                    {input.type === 'select' ? (
+                      <div className="relative">
+                        <select name={input.name} value={formData[input.name]} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-health-500 appearance-none transition-all">
+                          {input.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                        <ChevronDown size={16} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+                    ) : (
+                      <input type={input.type} name={input.name} value={formData[input.name]} onChange={handleChange} placeholder={input.placeholder} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-health-500 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={onPredict} className="w-full py-5 rounded-[1.5rem] text-white font-black text-lg gradient-button flex items-center justify-center space-x-3 shadow-xl shadow-health-500/20">
+                <ShieldCheck size={24} />
+                <span>Run AI Diagnosis</span>
+              </button>
+            </motion.div>
+          );
+        };
+
+        const ResultsPanel = ({ result }) => {
+          const colors = {
+            Low: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
+            Moderate: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
+            High: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+          };
+
+          // Safe color styles lookup for non-standard risk levels (like Critical (Low) or Low (Hypo))
+          const activeColor = colors[result.level] || 
+            (result.level.includes('High') ? colors.High : 
+             result.level.includes('Moderate') ? colors.Moderate : colors.Low);
+
+          return (
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 shadow-xl border border-slate-100 dark:border-slate-800 h-full glass-card relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-5"><ShieldCheck size={120} className="text-health-500" /></div>
+              <div className="relative z-10 flex flex-col h-full">
+                
+                {/* Redesigned Header: Centered layout to prevent collapsing */}
+                <div className="flex flex-col items-center text-center space-y-4 mb-6">
+                  <div className={`p-5 rounded-[2rem] ${activeColor.split(' ')[0]} bg-opacity-25 flex items-center justify-center`}>
+                    <Shield size={44} className={activeColor.split(' ')[1]} />
+                  </div>
+                  <div>
+                    <span className={`px-5 py-1.5 rounded-full text-xs font-black uppercase tracking-[0.2em] ${activeColor}`}>
+                      {result.level} Risk
+                    </span>
+                    <h3 className="text-3xl font-black text-slate-800 dark:text-white mt-4 mb-2">Analysis Complete</h3>
+                    <p className="text-slate-400 dark:text-slate-500 text-xs leading-relaxed max-w-[280px] mx-auto">
+                      Neural network evaluation of your biometric parameters has finalized a comprehensive metabolic risk profile.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Redesigned Probability Index: Clear, centered visual meter */}
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-6 rounded-[2rem] border border-slate-100/80 dark:border-slate-800/60 mb-6 w-full text-center flex flex-col items-center">
+                  <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[10px] mb-2">Probability Index</p>
+                  <p className="text-6xl font-black text-health-500 leading-none mb-4">{result.probability}%</p>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 shadow-inner w-full mb-3">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${result.probability}%` }} className="h-full bg-health-500 rounded-full shadow-[0_0_15px_rgba(34,197,94,0.5)]" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold max-w-[240px] leading-relaxed">
+                    Statistical likelihood of metabolic anomalies compared to normal clinical baselines.
+                  </p>
+                </div>
+                <div className="my-6 relative z-10 flex-1">
+                  <p className="text-[10px] font-black text-health-600 dark:text-health-400 uppercase tracking-widest mb-3 flex items-center">
+                    <Zap size={12} className="mr-1" /> AI Comprehensive Report
+                  </p>
+                  <div className="space-y-4">
+                    {(result.level === 'High' ? [
+                      "Your predictive risk model indicates a critical likelihood of progressing toward severe metabolic syndrome or Type 2 Diabetes complications. The neural network has flagged multiple biomarkers that significantly deviate from optimal metabolic homeostasis, requiring immediate clinical attention.",
+                      "Elevated glycemic indices, combined with your provided biometrics, suggest acute insulin resistance. The model's high confidence interval indicates that your pancreatic beta-cell function may be under severe stress, struggling to maintain normal glucose clearance rates.",
+                      "We strongly advise initiating a medically supervised intervention without delay. Schedule a comprehensive metabolic panel and consult an endocrinologist immediately. Your treatment may require pharmacological therapy, stringent low-glycemic dietary restrictions, and continuous glucose monitoring.",
+                      "While these results indicate a high-risk trajectory, immediate and aggressive intervention can stabilize your condition. Consistent medical management and radical lifestyle modifications are paramount to preventing irreversible microvascular and macrovascular complications."
+                    ] : result.level === 'Moderate' ? [
+                      "Our AI neural network detected borderline anomalies in your metabolic signature, placing you in a moderate risk category. While not immediately critical, these early warning signs suggest a developing systemic insulin resistance that requires proactive lifestyle modifications.",
+                      "Your clinical data reveals an imbalance in metabolic processing, likely characterized by delayed glucose clearance or elevated baseline insulin demands. The algorithm identified these subtle deviations as precursors to prediabetes if left unchecked.",
+                      "We highly recommend adopting a strict low-glycemic diet and increasing your cardiovascular activity. Focus on significantly reducing refined carbohydrates, engaging in at least 150 minutes of moderate aerobic exercise per week, and prioritizing restorative sleep to optimize your insulin sensitivity.",
+                      "This is a pivotal window for intervention. By implementing these targeted lifestyle changes now, you have a strong probability of reversing this metabolic trend. We advise monitoring your fasting glucose levels weekly and scheduling a follow-up assessment in three months."
+                    ] : [
+                      "Your metrics fall within highly optimal healthy ranges. Your clinical data aligns closely with our baseline for metabolic homeostasis, and the neural network found no significant indicators of insulin resistance or impending metabolic dysfunction.",
+                      "The analysis of your glycemic markers and provided biometrics suggests excellent cellular insulin sensitivity and efficient glucose metabolism. Your body is effectively regulating energy distribution without placing undue stress on pancreatic beta cells.",
+                      "To sustain this optimal state, continue emphasizing a balanced, fiber-rich diet comprised of whole foods. Maintain consistent hydration, regular physical activity, and adequate sleep cycles. No immediate medical intervention or strict dietary restriction is necessary at this time.",
+                      "Our predictive model suggests a highly favorable long-term metabolic trajectory if your current habits are maintained. Continue your routine health screenings annually, and use this platform to periodically monitor your biomarkers to ensure your metabolic health remains in peak condition."
+                    ]).map((paragraph, index) => (
+                      <div key={index} className="p-5 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-health-200 dark:hover:border-health-800/50 transition-colors">
+                        <p className="text-[9px] font-black text-health-500 uppercase tracking-widest mb-2">
+                          0{index + 1} / {["Primary Diagnosis", "Clinical Interpretation", "Recommended Action Plan", "Long-term Prognosis"][index]}
+                        </p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium text-justify">
+                          {paragraph}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-auto space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/30 text-center flex flex-col justify-center">
+                      <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-1">AI Confidence</p>
+                      <p className="text-blue-600 dark:text-blue-400 font-black text-2xl mb-2">94.2%</p>
+                      <p className="text-[9px] text-blue-500/70 dark:text-blue-400/70 font-bold leading-tight">High certainty from robust cross-validation.</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl border border-purple-100 dark:border-purple-800/30 text-center flex flex-col justify-center">
+                      <p className="text-purple-400 text-[10px] font-black uppercase tracking-widest mb-1">Active Model</p>
+                      <p className="text-purple-600 dark:text-purple-400 font-black text-2xl mb-2">XGBoost</p>
+                      <p className="text-[9px] text-purple-500/70 dark:text-purple-400/70 font-bold leading-tight">Gradient boosting optimized for diagnostics.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Small ROC Curve in Corner */}
+              <div className="absolute bottom-4 right-4 w-24 h-24 opacity-30 group-hover:opacity-100 transition-opacity">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={[
+                    { f: 0, t: 0 }, { f: 0.1, t: 0.6 }, { f: 0.2, t: 0.85 }, 
+                    { f: 0.4, t: 0.92 }, { f: 0.7, t: 0.98 }, { f: 1, t: 1 }
+                  ]}>
+                    <Area type="monotone" dataKey="t" stroke="#22c55e" fill="#22c55e" fillOpacity={0.2} strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+                <p className="absolute bottom-0 right-0 text-[8px] font-black text-slate-400 uppercase tracking-tighter">ROC Curve</p>
+              </div>
+            </motion.div>
+          );
+        };
+
+        const AnalyticsSection = () => (
+          <div className="space-y-6">
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2rem] p-8 shadow-sm border border-slate-100 dark:border-slate-800 glass-card">
+              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Risk Contribution</h3>
+              <div className="space-y-5">
+                {[ {l: 'Glucose', v: 32}, {l: 'BMI', v: 24}, {l: 'Age', v: 18} ].map((f, i) => (
+                  <div key={f.l}>
+                    <div className="flex justify-between text-[10px] font-black mb-2"><span className="text-slate-500 uppercase">{f.l}</span><span className="text-health-600">{f.v}%</span></div>
+                    <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full"><div className="h-full bg-health-500 rounded-full" style={{width: `${f.v}%`}}></div></div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="bg-health-600 rounded-[2rem] p-8 text-white relative overflow-hidden shadow-xl shadow-health-500/20">
+               <div className="absolute -right-10 -bottom-10 opacity-10"><Leaf size={160} /></div>
+               <h4 className="text-xl font-bold mb-2">Live Analysis</h4>
+               <p className="text-xs text-health-100 font-medium opacity-90 leading-relaxed mb-6">Model status: Synchronized and scanning metrics in real-time.</p>
+               <div className="flex items-center space-x-2"><div className="w-2 h-2 bg-white rounded-full animate-pulse"></div><span className="text-[10px] font-black uppercase tracking-widest">Active System</span></div>
+            </motion.div>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="bg-slate-50 dark:bg-slate-800/30 rounded-[2rem] p-6 border border-dashed border-slate-200 dark:border-slate-700 max-h-[480px] overflow-y-auto custom-scrollbar">
+               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Daily Recommendation</h4>
+               <div className="space-y-4">
+                  {[
+                    { i: FiberBoostIcon, t: 'Fiber Boost', d: 'High-fiber foods slow glucose absorption.' },
+                    { i: ActiveLifeIcon, t: 'Active Life', d: '30-min exercise increases insulin sensitivity.' },
+                    { i: HydrationIcon, t: 'Hydration', d: 'Drink water to flush excess blood sugar.' },
+                    { i: SleepCycleIcon, t: 'Sleep Cycle', d: 'Establish regular 8-hour sleep cycles.' },
+                    { i: StressControlIcon, t: 'Stress Control', d: 'Practice deep breathing to lower cortisol.' },
+                    { i: PortionSizeIcon, t: 'Portion Size', d: 'Use smaller plates to control calorie intake.' },
+                    { i: WholeGrainsIcon, t: 'Whole Grains', d: 'Swap refined grains with quinoa and oats.' },
+                    { i: RegularCheckIcon, t: 'Regular Check', d: 'Schedule periodic HbA1c screenings.' },
+                    { i: HealthyFatsIcon, t: 'Healthy Fats', d: 'Incorporate avocado and olive oil lipids.' },
+                    { i: SugarLimitIcon, t: 'Sugar Limit', d: 'Avoid sweetened drinks and insulin spikes.' },
+                    { i: MealTimingIcon, t: 'Meal Timing', d: 'Eat at consistent intervals for stability.' },
+                    { i: FootCareIcon, t: 'Foot Care', d: 'Inspect feet daily for neuropathic cuts.' },
+                    { i: VisionCareIcon, t: 'Vision Care', d: 'Annual eye exams prevent retinal damage.' },
+                    { i: MindfulnessIcon, t: 'Mindfulness', d: '10 mins meditation reduces metabolic stress.' },
+                    { i: OralHealthIcon, t: 'Oral Health', d: 'Flossing lowers systemic inflammation.' },
+                    { i: BloodPressureIcon, t: 'Blood Pressure', d: 'Keep pressure levels below 130/80 mmHg.' }
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-start space-x-3">
+                      <div className="mt-1 text-health-500">{React.createElement(item.i, { size: 14 })}</div>
+                      <div>
+                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">{item.t}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-500">{item.d}</p>
+                      </div>
+                    </div>
+                  ))}
+               </div>
+             </motion.div>
+          </div>
+        );
+
+        // --- MAIN APP ---
+
+        const App = () => {
+          const [darkMode, setDarkMode] = useState(() => {
+            const saved = localStorage.getItem('darkMode');
+            return saved !== null ? saved === 'true' : true;
+          });
+          const [isLoggedIn, setIsLoggedIn] = useState(false);
+          const [authMode, setAuthMode] = useState('register');
+          const [activeTab, setActiveTab] = useState('Dashboard');
+          const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+          const [formData, setFormData] = useState({ age: '', gender: 'Male', bmi: '', glucose: '', glucoseType: 'Fasting', hba1c: '', bp: '', pregnancies: '0', skin: '', insulin: '', pedigree: '', activity: 'Moderate' });
+          const [predictionResult, setPredictionResult] = useState(null);
+          const [isPredicting, setIsPredicting] = useState(false);
+          const [showToast, setShowToast] = useState(false);
+          
+          const [historyData, setHistoryData] = useState(() => {
+            const saved = localStorage.getItem('predictionHistory');
+            return saved ? JSON.parse(saved) : [];
+          });
+
+          const [currentTime, setCurrentTime] = useState(new Date());
+
+          useEffect(() => {
+            const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+            return () => clearInterval(timer);
+          }, []);
+
+          const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+          useEffect(() => {
+            localStorage.setItem('darkMode', darkMode);
+            document.documentElement.classList.toggle('dark', darkMode);
+          }, [darkMode]);
+
+          useEffect(() => localStorage.setItem('predictionHistory', JSON.stringify(historyData)), [historyData]);
+
+          const handlePredict = () => {
+            if (!formData.age || !formData.glucose || !formData.hba1c) return alert('Fill required fields (Age, Glucose, HbA1c)');
+            setIsPredicting(true);
+            setTimeout(() => {
+                const glucose = parseFloat(formData.glucose);
+                const hba1c = parseFloat(formData.hba1c);
+                const isFasting = formData.glucoseType === 'Fasting';
+                
+                let level = 'Low';
+                let prob = 10;
+                
+                // Glucose Logic (Medical Ranges)
+                if (isFasting) {
+                    if (glucose > 300) { level = 'High'; prob = 98; }
+                    else if (glucose >= 126) { level = 'High'; prob = 85 + (glucose - 126) / 10; }
+                    else if (glucose >= 100) { level = 'Moderate'; prob = 45 + (glucose - 100) * 1.5; }
+                    else if (glucose >= 70) { level = 'Low'; prob = 5 + (glucose - 70) / 2; }
+                    else if (glucose < 54) { level = 'Critical (Low)'; prob = 95; }
+                    else { level = 'Low (Hypo)'; prob = 70; }
+                } else {
+                    // Post-meal
+                    if (glucose >= 200) { level = 'High'; prob = 90; }
+                    else if (glucose >= 140) { level = 'Moderate'; prob = 55; }
+                    else { level = 'Low'; prob = 15; }
+                }
+                
+                // HbA1c Multiplier
+                if (hba1c >= 9.0) { level = 'High'; prob = Math.max(prob, 99); }
+                else if (hba1c >= 6.5) { level = 'High'; prob = Math.max(prob, 80); }
+                else if (hba1c >= 5.7) { level = level === 'High' ? 'High' : 'Moderate'; prob = Math.max(prob, 50); }
+
+                const result = { level, probability: Math.min(prob, 99.9).toFixed(1) };
+                setPredictionResult(result);
+                
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                setHistoryData(prev => [{ 
+                    id: Date.now(), 
+                    date: new Date().toISOString().split('T')[0],
+                    time: timestamp,
+                    ...formData, 
+                    ...result 
+                }, ...prev]);
+                setIsPredicting(false);
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
+            }, 1500);
+          };
+
+          const clearHistory = () => confirm('Clear history?') && setHistoryData([]);
+
+          const renderContent = () => {
+            switch(activeTab) {
+              case 'Dashboard': return (
+                <>
+                  <StatsGrid probability={predictionResult ? predictionResult.probability : '0.0'} />
+                  
+                  <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-12 mb-8 border border-slate-100 dark:border-slate-800 glass-card text-center flex flex-col items-center justify-center min-h-[350px]">
+                    <div className="bg-health-50 dark:bg-health-900/30 p-8 rounded-full mb-8 flex items-center justify-center">
+                      <SmartScannerIcon size={80} className="text-health-500" />
+                    </div>
+                    <h2 className="text-4xl font-bold text-slate-800 dark:text-white mb-4 tracking-tight">Ready for Scan?</h2>
+                    <p className="text-slate-400 dark:text-slate-500 font-bold max-w-sm mb-10 tracking-wide uppercase text-xs">Run your medical metrics through our neural networks for an instant diagnosis.</p>
+                    <button onClick={() => setActiveTab('Prediction')} className="px-12 py-5 bg-health-500 text-white rounded-[1.5rem] font-black text-xl hover:bg-health-600 transition-all shadow-xl shadow-health-500/20">Initiate Prediction</button>
+                  </motion.div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+                    {[
+                        { id: 'Dashboard', i: DashboardIcon, l: 'Overview', c: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600' },
+                        { id: 'Prediction', i: PredictionIcon, l: 'AI Scan', c: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' },
+                        { id: 'Report', i: ReportIcon, l: 'My Report', c: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600' },
+                        { id: 'Health Tips', i: HealthTipsIcon, l: 'Vital Tips', c: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600' },
+                        { id: 'About', i: AboutIcon, l: 'About Us', c: 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600' },
+                        { id: 'Contact', i: ContactIcon, l: 'Support', c: 'bg-slate-50 dark:bg-slate-800 text-slate-600' }
+                    ].map((item, idx) => (
+                        <motion.div
+                            key={item.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.05 }}
+                            onClick={() => setActiveTab(item.id)}
+                            className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col items-center justify-center space-y-4 group glass-card"
+                        >
+                            <div className={`w-14 h-14 rounded-2xl ${item.c} flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner`}>
+                                {React.createElement(item.i, { size: 24, strokeWidth: 1.75 })}
+                            </div>
+                            <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-hover:text-slate-800 dark:group-hover:text-white">{item.l}</span>
+                        </motion.div>
+                    ))}
+                  </div>
+
+                  <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 mb-8 shadow-sm border border-slate-100 dark:border-slate-800 glass-card max-w-4xl mx-auto">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Metabolic Correlation</h3>
+                            <p className="text-slate-400 text-[8px] font-black uppercase tracking-widest mt-0.5">Glucose vs Activity</p>
+                        </div>
+                    </div>
+                    <div className="h-[200px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={[
+                                {d:'Mon', g:92, a:65}, {d:'Tue', g:98, a:75}, {d:'Wed', g:88, a:50},
+                                {d:'Thu', g:105, a:90}, {d:'Fri', g:94, a:70}, {d:'Sat', g:89, a:40}, {d:'Sun', g:91, a:55}
+                            ]}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="d" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 900}} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 900}} />
+                                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                                <Bar dataKey="a" fill="#60a5fa" barSize={20} radius={[5, 5, 0, 0]} opacity={0.3} />
+                                <Line type="monotone" dataKey="g" stroke="#22c55e" strokeWidth={3} dot={{r: 4, fill: '#22c55e', stroke: '#fff', strokeWidth: 2}} />
+                            </ComposedChart>
+                        </ResponsiveContainer>
+                    </div>
+                  </motion.div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
+                    <div className="lg:col-span-12">
+                        <AnalyticsSection />
+                    </div>
+                  </div>
+                </>
+              );
+              case 'Prediction': return (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-[600px]">
+                    <div className="lg:col-span-8 space-y-8">
+                        <PredictionView formData={formData} setFormData={setFormData} onPredict={handlePredict} />
+                        
+                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 shadow-sm border border-slate-100 dark:border-slate-800 glass-card">
+                            <div className="flex items-center justify-between mb-8">
+                                <h3 className="text-2xl font-bold text-slate-800 dark:text-white">Health Tracker</h3>
+                                <div className="text-[10px] font-black text-health-500 uppercase tracking-widest bg-health-50 dark:bg-health-950/30 px-4 py-2 rounded-full">Live Monitoring</div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-3xl border border-blue-100 dark:border-blue-800/30">
+                                    <div className="flex items-center space-x-3 mb-4">
+                                        <div className="bg-blue-500 p-2.5 rounded-xl text-white"><Droplets size={20} /></div>
+                                        <p className="text-sm font-bold text-blue-800 dark:text-blue-400">Water</p>
+                                    </div>
+                                    <p className="text-3xl font-black text-blue-900 dark:text-blue-200">1.8L</p>
+                                    <p className="text-[10px] text-blue-500 mt-1 uppercase font-black">Goal: 3.0L</p>
+                                </div>
+                                <div className="p-6 bg-orange-50 dark:bg-orange-900/20 rounded-3xl border border-orange-100 dark:border-orange-800/30">
+                                    <div className="flex items-center space-x-3 mb-4">
+                                        <div className="bg-orange-500 p-2.5 rounded-xl text-white"><Footprints size={20} /></div>
+                                        <p className="text-sm font-bold text-orange-800 dark:text-orange-400">Steps</p>
+                                    </div>
+                                    <p className="text-3xl font-black text-orange-900 dark:text-orange-200">6,420</p>
+                                    <p className="text-[10px] text-orange-500 mt-1 uppercase font-black">Goal: 10k</p>
+                                </div>
+                                <div className="p-6 bg-red-50 dark:bg-red-900/20 rounded-3xl border border-red-100 dark:border-red-800/30">
+                                    <div className="flex items-center space-x-3 mb-4">
+                                        <div className="bg-red-500 p-2.5 rounded-xl text-white"><Flame size={20} /></div>
+                                        <p className="text-sm font-bold text-red-800 dark:text-red-400">Calories</p>
+                                    </div>
+                                    <p className="text-3xl font-black text-red-900 dark:text-red-200">1,150</p>
+                                    <p className="text-[10px] text-red-500 mt-1 uppercase font-black">Goal: 2.2k</p>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 shadow-sm border border-slate-100 dark:border-slate-800 glass-card">
+                            <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">Common Symptoms</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {[
+                                    { t: 'Excessive Thirst', d: 'Feeling thirsty more often.', i: Droplets, c: 'text-blue-500', b: 'bg-blue-50' },
+                                    { t: 'Frequent Urination', d: 'Increased need, especially at night.', i: Thermometer, c: 'text-purple-500', b: 'bg-purple-50' },
+                                    { t: 'Weight Loss', d: 'Losing weight rapidly.', i: TrendingDown, c: 'text-red-500', b: 'bg-red-50' },
+                                    { t: 'Fatigue & Vision', d: 'Persistent tiredness.', i: Eye, c: 'text-amber-500', b: 'bg-amber-50' }
+                                ].map((s, idx) => (
+                                    <div key={idx} className={`p-5 ${s.b} dark:bg-slate-800/50 rounded-3xl border border-white/50 dark:border-slate-700 flex items-start space-x-4`}>
+                                        <div className={`${s.c} mt-1`}>{React.createElement(s.i, { size: 20 })}</div>
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{s.t}</p>
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{s.d}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    </div> 
+                    <div className="lg:col-span-4">
+                    {isPredicting ? (
+                        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 border border-slate-100 dark:border-slate-800 glass-card h-fit min-h-[400px] flex flex-col items-center justify-center text-center">
+                            <div className="w-16 h-16 border-4 border-health-100 border-t-health-500 rounded-full animate-spin mb-6"></div>
+                            <p className="text-slate-400 font-black uppercase tracking-widest text-sm">Neural Link Established<br/>Scanning Data...</p>
+                        </div>
+                    ) : predictionResult ? (
+                        <ResultsPanel result={predictionResult} />
+                    ) : (
+                        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 border border-slate-100 dark:border-slate-800 glass-card h-fit min-h-[400px] flex flex-col items-center justify-center text-center">
+                            <ShieldCheck size={80} className="text-slate-200 dark:text-slate-800 mb-6" />
+                            <p className="text-slate-400 dark:text-slate-600 font-black uppercase tracking-widest text-sm">System Idle<br/>Waiting for Data</p>
+                        </div>
+                    )}
+                  </div>
+                </div>
+              );
+              case 'Report': return (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 border border-slate-100 dark:border-slate-800 glass-card">
+                  <div className="flex items-center justify-between mb-10">
+                    <h3 className="text-2xl font-bold text-slate-800 dark:text-white">Report</h3>
+                    <button onClick={clearHistory} className="text-xs font-black uppercase tracking-widest text-red-500 hover:text-red-400 transition-colors bg-red-50 dark:bg-red-950/30 px-6 py-2 rounded-xl">Clear All</button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                <th className="pb-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</th>
+                                <th className="pb-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Metrics</th>
+                                <th className="pb-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Risk</th>
+                                <th className="pb-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Prob</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                            {historyData.map(h => (
+                                <tr key={h.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                    <td className="py-6">
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-bold text-slate-500">{h.date}</span>
+                                            <span className="text-[10px] font-black text-health-500">{h.time || '12:00 PM'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="py-6">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-black text-slate-700 dark:text-slate-300">GLU: {h.glucose}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">BMI: {h.bmi}</span>
+                                        </div>
+                                    </td>
+                                    <td className="py-6">
+                                        <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${h.level === 'High' ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' : h.level === 'Moderate' ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'}`}>{h.level}</span>
+                                    </td>
+                                    <td className="py-6 text-sm font-black text-health-600">{h.probability}%</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                  </div>
+                </motion.div>
+              );
+              case 'Health Tips': return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[
+                        { t: 'Fiber Boost', d: 'High-fiber oats/beans slow sugar absorption.', c: 'bg-red-500', i: FiberBoostIcon },
+                        { t: 'Active Life', d: '30-min walks increase insulin sensitivity.', c: 'bg-blue-500', i: ActiveLifeIcon },
+                        { t: 'Hydration', d: 'Water helps flush out excess glucose.', c: 'bg-health-500', i: HydrationIcon },
+                        { t: 'Sleep Cycle', d: '8-hour cycles balance health hormones.', c: 'bg-purple-500', i: SleepCycleIcon },
+                        { t: 'Stress Control', d: 'Deep breathing lowers cortisol and sugar.', c: 'bg-indigo-500', i: StressControlIcon },
+                        { t: 'Portion Size', d: 'Smaller plates help manage caloric intake.', c: 'bg-amber-500', i: PortionSizeIcon },
+                        { t: 'Whole Grains', d: 'Quinoa/Brown rice prevent sugar spikes.', c: 'bg-yellow-600', i: WholeGrainsIcon },
+                        { t: 'Regular Check', d: 'Routine screenings are key to health.', c: 'bg-teal-500', i: RegularCheckIcon },
+                        { t: 'Healthy Fats', d: 'Avocados and nuts support heart health.', c: 'bg-lime-500', i: HealthyFatsIcon },
+                        { t: 'Sugar Limit', d: 'Avoid sodas to prevent insulin spikes.', c: 'bg-violet-500', i: SugarLimitIcon },
+                        { t: 'Meal Timing', d: 'Eat at regular intervals for stability.', c: 'bg-rose-500', i: MealTimingIcon },
+                        { t: 'Foot Care', d: 'Check feet daily for cuts or blisters.', c: 'bg-sky-500', i: FootCareIcon },
+                        { t: 'Vision Care', d: 'Annual eye exams prevent complications.', c: 'bg-cyan-500', i: VisionCareIcon },
+                        { t: 'Mindfulness', d: '10 mins meditation reduces metabolic stress.', c: 'bg-emerald-500', i: MindfulnessIcon },
+                        { t: 'Oral Health', d: 'Gum health is linked to blood sugar control.', c: 'bg-teal-600', i: OralHealthIcon },
+                        { t: 'Blood Pressure', d: 'Monitor regularly to prevent heart strain.', c: 'bg-indigo-600', i: BloodPressureIcon }
+                    ].map((tip, i) => (
+                        <motion.div key={i} whileHover={{ y: -5 }} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 glass-card">
+                            <div className={`w-12 h-12 rounded-2xl ${tip.c} bg-opacity-10 mb-4 flex items-center justify-center`}>{React.createElement(tip.i, { className: tip.c.replace('bg-', 'text-') })}</div>
+                            <h4 className="font-black text-slate-800 dark:text-white mb-2">{tip.t}</h4>
+                            <p className="text-xs text-slate-400 font-medium leading-relaxed">{tip.d}</p>
+                        </motion.div>
+                    ))}
+                </div>
+              );
+              case 'About': return (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 border border-slate-100 dark:border-slate-800 glass-card max-w-3xl">
+                    <h3 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">About DiaPredict</h3>
+                    <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-4">DiaPredict is a next-generation clinical intelligence platform that leverages state-of-the-art neural networks and predictive data science to provide actionable health diagnostics. Our mission is to empower global health by providing individuals and medical professionals with the tools needed for proactive metabolic management.</p>
+                    <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-4">Built on a foundation of rigorous data analysis and clinical research, DiaPredict offers a seamless, high-fidelity experience that translates complex medical metrics into understandable, life-saving insights. Whether you are monitoring existing conditions or assessing future risks, our AI-driven models provide precision and reliability.</p>
+                    <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-4">Our platform integrates the latest clinical guidelines for glucose management, fasting blood sugar ranges, and HbA1c metrics to ensure that every prediction is backed by standard medical knowledge. We are committed to continuous improvement and scientific transparency in all our AI models.</p>
+                    <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-6">We believe that information is the most powerful tool in healthcare. By democratizing access to advanced predictive analytics, we aim to reduce the global burden of diabetes and its complications, one prediction at a time.</p>
+                    <div className="bg-health-50 dark:bg-health-950/30 p-8 rounded-3xl border border-health-100 dark:border-health-900/30">
+                        <h4 className="font-black text-health-700 dark:text-health-400 uppercase tracking-widest text-xs mb-4">Core Mission</h4>
+                        <p className="text-sm text-health-600 dark:text-health-500 font-normal">"Empowering global health through artificial intelligence and proactive data science."</p>
+                    </div>
+                </motion.div>
+              );
+              case 'Contact': return (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-10 border border-slate-100 dark:border-slate-800 glass-card max-w-4xl">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                        <div className="space-y-6">
+                            <h3 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Connect</h3>
+                            <div className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl flex items-center space-x-4 border border-slate-100 dark:border-slate-700">
+                                <div className="bg-health-500 p-3 rounded-xl text-white"><Mail size={20} /></div>
+                                <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Support</p><a href="mailto:online@homeocare.in" className="font-black text-slate-700 dark:text-slate-300 hover:text-health-500 transition-colors">online@homeocare.in</a></div>
+                            </div>
+                            <div className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl flex items-center space-x-4 border border-slate-100 dark:border-slate-700">
+                                <div className="bg-blue-500 p-3 rounded-xl text-white"><Users size={20} /></div>
+                                <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Direct Support</p><p className="font-black text-slate-700 dark:text-slate-300">8977540651</p></div>
+                            </div>
+                            <div className="pt-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Business Hours</p>
+                                <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-700">
+                                    <div className="flex justify-between text-sm mb-2"><span className="text-slate-400">Mon - Fri</span><span className="font-bold text-slate-700 dark:text-slate-300">09:00 - 18:00</span></div>
+                                    <div className="flex justify-between text-sm"><span className="text-slate-400">Sat - Sun</span><span className="font-bold text-slate-700 dark:text-slate-300">Emergency Only</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="space-y-6">
+                            <h3 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Our Presence</h3>
+                            <div className="space-y-4">
+                                {[
+                                    { c: 'Andhra Pradesh', a: 'Visakhapatnam, Vijayawada' },
+                                    { c: 'Karnataka', a: 'Bengaluru, Mysuru' },
+                                    { c: 'Tamil Nadu', a: 'Chennai, Coimbatore' }
+                                ].map(o => (
+                                    <div key={o.c} className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700">
+                                        <p className="font-bold text-slate-800 dark:text-white">{o.c}</p>
+                                        <p className="text-xs text-slate-400 mt-1">{o.a}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+              );
+              default: return null;
+            }
+          };
+
+           if (!isLoggedIn) {
+             return authMode === 'login' ? (
+               <LoginView onLogin={() => setIsLoggedIn(true)} onSwitch={() => setAuthMode('register')} />
+             ) : (
+               <RegisterView onRegister={() => setAuthMode('login')} onSwitch={() => setAuthMode('login')} />
+             );
+           }
+
+          return (
+            <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 transition-colors duration-500">
+              <Sidebar 
+                darkMode={darkMode} setDarkMode={setDarkMode} 
+                activeTab={activeTab} setActiveTab={setActiveTab} 
+                onLogout={() => setIsLoggedIn(false)} 
+                isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} 
+              />
+              <motion.main key={activeTab} initial={{ opacity: 0, x: 5 }} animate={{ opacity: 1, x: 0 }} className="flex-1 lg:ml-64 p-4 md:p-10 h-screen overflow-y-auto overflow-x-hidden">
+                <Navbar 
+                    onMenuClick={() => setIsSidebarOpen(true)} 
+                    activeTab={activeTab} 
+                    formattedTime={formattedTime}
+                />
+                {renderContent()}
+              </motion.main>
+              
+              <AnimatePresence>
+                {showToast && (
+                  <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-10 right-10 z-[100]">
+                    <div className="bg-health-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-4 border border-health-400/30">
+                        <ShieldCheck size={24} />
+                        <span className="font-black uppercase tracking-widest text-xs">Diagnosis Complete</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        };
+
+        // --- BOOTSTRAP SYSTEM ---
+        try {
+            const rootElement = document.getElementById('root');
+            if (!rootElement) throw new Error("Critical Failure: Root element not found in DOM.");
+            
+            const root = ReactDOM.createRoot(rootElement);
+            root.render(<App />);
+            console.log("DiaPredict System: Successfully initialized with local libraries.");
+        } catch (bootError) {
+            console.error("DiaPredict System Boot Error:", bootError);
+            document.body.innerHTML = `
+                <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #020617; color: white; font-family: 'Inter', sans-serif; text-align: center; padding: 20px;">
+                    <div style="background: #22c55e; width: 60px; height: 60px; border-radius: 15px; display: flex; align-items: center; justify-content: center; margin-bottom: 24px; box-shadow: 0 0 20px rgba(34,197,94,0.4);">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2a2 2 0 0 0-2 2v5H4a2 2 0 0 0-2 2v2c0 1.1.9 2 2 2h5v5c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-5V4a2 2 0 0 0-2-2h-2z"/></svg>
+                    </div>
+                    <h1 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 10px; font-style: italic;">System Initialization Failed</h1>
+                    <p style="color: #64748b; font-weight: 600; max-width: 400px; margin-bottom: 30px; line-height: 1.6;">A library or component failed to load correctly during the boot sequence.</p>
+                    <div style="background: rgba(255,0,0,0.1); border: 1px solid rgba(255,0,0,0.2); padding: 15px; border-radius: 12px; margin-bottom: 30px; width: 100%; max-width: 500px;">
+                        <code style="color: #f87171; font-size: 0.8rem; font-weight: bold;">[Error Code 130] ${bootError.message}</code>
+                    </div>
+                    <button onclick="location.reload()" style="padding: 18px 40px; background: #22c55e; border: none; border-radius: 15px; color: white; font-weight: 900; font-size: 1rem; cursor: pointer; transition: transform 0.2s; box-shadow: 0 10px 20px rgba(34,197,94,0.3);">
+                        RETRY SYSTEM BOOT
+                    </button>
+                </div>
+            `;
+        }
+
+
+    </script>
+</body>
+</html>
